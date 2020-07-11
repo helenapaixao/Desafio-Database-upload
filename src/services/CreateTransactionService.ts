@@ -1,43 +1,59 @@
+import { getRepository, getCustomRepository } from 'typeorm';
+
 import AppError from '../errors/AppError';
 
 import Transaction from '../models/Transaction';
-import TransactionsRepository from '../repositories/TransactionsRepository'
-import { getCustomRepository } from 'typeorm';
+import Category from '../models/Category';
 
+import TransactionsRepository from '../repositories/TransactionsRepository';
 
 interface Request {
-  id: string;
   title: string;
-  type: 'income' | 'outcome';
   value: number;
-  category_id: string;
+  type: 'income' | 'outcome';
+  category: string;
 }
-class CreateTransactionService {
+
+export default class CreateTransactionService {
   public async execute({
-    id,
     title,
     type,
     value,
-    category_id,
+    category,
   }: Request): Promise<Transaction> {
+    const transactionsRepository = getCustomRepository(TransactionsRepository);
 
-    const TransactionsRepository = getCustomRepository(TransactionsRepository);
+    if (!['income', 'outcome'].includes(type)) {
+      throw new AppError('Type invalid');
+    }
 
+    const { total } = await transactionsRepository.getBalance();
+    if (type === 'outcome' && total < value) {
+      throw new AppError('You do not have enougth balance');
+    }
 
-  const transaction
-  id,
-  title,
-  type,
-  value,
-  category_id
-  });
+    const categoryRepository = getRepository(Category);
 
-  await TransactionsRepository.save(transaction);
-  return transaction;
+    let transactionCategory = await categoryRepository.findOne({
+      where: {
+        title: category,
+      },
+    });
 
+    if (!transactionCategory) {
+      transactionCategory = categoryRepository.create({ title: category });
+      await categoryRepository.save(transactionCategory);
+    }
+
+    const transaction = transactionsRepository.create({
+      title,
+      type,
+      value,
+      category: transactionCategory,
+    });
+
+    await transactionsRepository.save(transaction);
+
+    return transaction;
+  }
 }
-
-export default CreateTransactionService;
-
-//title, value, type, e category
-//id, title, value, type, category_id, created_at, updated_at
